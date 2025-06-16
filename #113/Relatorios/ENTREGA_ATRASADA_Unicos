@@ -1,0 +1,154 @@
+USE SANKHYA_TESTE
+GO
+
+WITH DatasLimite AS (
+    SELECT
+        MIN(RE.DTROTEIRO) AS DataMinima,
+        -- Garante que o calendário sempre inclua a data atual + 1, mesmo se não houver registros recentes
+        CASE WHEN MAX(RE.DTENTREGACLIENTE) >= DATEADD(DAY, 1, CONVERT(DATE, GETDATE()))
+             THEN MAX(RE.DTENTREGACLIENTE)
+             ELSE DATEADD(DAY, 1, CONVERT(DATE, GETDATE()))
+        END AS DataMaxima
+    FROM sankhya.AD_ROTEIROENTREGA RE
+),
+Calendario AS (
+    -- Gera datas entre a menor DTROTEIRO e a maior DTENTREGACLIENTE
+    SELECT CAST(DATEADD(DAY, v.number, DL.DataMinima) AS DATE) AS DataDia
+    FROM master..spt_values v
+    CROSS JOIN DatasLimite DL
+    WHERE v.type = 'P'
+      AND DATEADD(DAY, v.number, DL.DataMinima) <= DL.DataMaxima
+),
+DadosBase AS (
+    SELECT
+        RE.NUNOTA,
+        RE.TIPMOV,
+        RE.DTROTEIRO,
+        -- Campo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        RE.DTTRANSPORTADORA,
+        RE.DTENTREGACLIENTE,
+        PAR.CODPARC AS CODPARCEIRO, -- para joins
+        RE.PARCEIRO AS NOME_PARCEIRO, -- para exibição
+        RE.TRANSPORTADORA,
+        RE.OBSERVACAO,
+        CAB.CODVEND,
+        ISNULL(PAR.AD_PZOTRANSPORTE, 0) AS PZO_ENTREGA_PAR,
+        PAR.CODCID
+    FROM sankhya.AD_ROTEIROENTREGA RE
+    JOIN sankhya.TGFCAB CAB ON RE.NUNOTA = CAB.NUNOTA
+    JOIN sankhya.TGFPAR PAR ON CAB.CODPARC = PAR.CODPARC
+    WHERE CONVERT(DATE, RE.DTROTEIRO) >= '01/06/2024'
+      AND CONVERT(DATE, RE.DTROTEIRO) < CONVERT(DATE, GETDATE())
+      AND RE.DTENTREGACLIENTE IS NULL
+      AND RE.DATAREMANEJAMENTO IS NULL
+),
+CalculosData AS (
+    SELECT
+        DB.NUNOTA,
+        DB.TIPMOV,
+        DB.DTROTEIRO,
+        -- Campo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        DB.DTTRANSPORTADORA,
+        DB.CODPARCEIRO,
+        DB.NOME_PARCEIRO,
+        DB.TRANSPORTADORA,
+        DB.OBSERVACAO,
+        DB.CODVEND,
+        DB.PZO_ENTREGA_PAR,
+        ((CASE WHEN (DB.DTTRANSPORTADORA IS NULL) THEN DB.DTROTEIRO ELSE DB.DTTRANSPORTADORA END)
+         + DB.PZO_ENTREGA_PAR) AS DT_PREVISTA_CLIENTE_CALC,
+        -- Cálculo de dias úteis para atraso usando a CTE Calendario
+        -- Cálculo de dias úteis para atraso usando a view de calendário de feriados
+        (
+            SELECT COUNT(*)
+            FROM sankhya.VW_RJS_CALENDARIO_FERIADOS CAL
+            INNER JOIN sankhya.TGFPAR PAR ON PAR.CODPARC = DB.CODPARCEIRO
+            LEFT JOIN sankhya.TSICID CID ON CID.CODCID = PAR.CODCID
+            LEFT JOIN sankhya.TSIUFS UF ON UF.CODUF = CID.UF
+            WHERE CAL.DATA > ((CASE WHEN (DB.DTTRANSPORTADORA IS NULL) THEN DB.DTROTEIRO ELSE DB.DTTRANSPORTADORA END) + DB.PZO_ENTREGA_PAR)
+              AND CAL.DATA <= CONVERT(DATE, GETDATE())
+              AND CAL.final_de_semana = 0
+              AND (
+                    CAL.descrferiado IS NULL
+                 OR (CAL.nacional = 'N' AND (CAL.coduf IS NULL OR CAL.coduf <> UF.CODUF) AND (CAL.codcid IS NULL OR CAL.codcid <> PAR.CODCID))
+              )
+        ) AS DIAS_ATRASO -- Dias úteis de atraso, usando view de calendário e feriados
+    FROM DadosBase AS DB
+    -- Filtro para considerar apenas notas com data prevista de entrega menor que hoje+1
+    WHERE CONVERT(DATE, ((CASE WHEN (DB.DTTRANSPORTADORA IS NULL) THEN DB.DTROTEIRO ELSE DB.DTTRANSPORTADORA END) + DB.PZO_ENTREGA_PAR)) < DATEADD(DAY, 1, CONVERT(DATE, GETDATE()))
+),
+DetalhesNotas AS (
+    SELECT
+        CD.NUNOTA,
+        CD.TIPMOV,
+        CD.DTROTEIRO,
+        -- Campo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        CD.DTTRANSPORTADORA,
+        CD.NOME_PARCEIRO,
+        CD.TRANSPORTADORA,
+        CD.OBSERVACAO,
+        CD.CODVEND,
+        CD.PZO_ENTREGA_PAR,
+        CD.DT_PREVISTA_CLIENTE_CALC,
+        CD.DIAS_ATRASO,
+        COALESCE(NotaV.NUMNOTA, NotaOutras.NUMNOTA) AS N_NOTA,
+        COALESCE(NotaV.DTNEG, NotaOutras.DTNEG) AS DT_EMISSAO
+    FROM CalculosData AS CD
+    OUTER APPLY (
+        SELECT CAB.NUMNOTA, CAB.DTNEG
+        FROM sankhya.TGFCAB AS CAB
+        WHERE CAB.NUNOTA = CD.NUNOTA AND CD.TIPMOV = 'V'
+    ) AS NotaV
+    OUTER APPLY (
+        SELECT CAB.NUMNOTA, CAB.DTNEG
+        FROM sankhya.TGFCAB AS CAB
+        WHERE CAB.NUNOTA = (SELECT TOP(1) VAR.NUNOTA FROM sankhya.TGFVAR AS VAR WHERE VAR.NUNOTAORIG = CD.NUNOTA)
+    ) AS NotaOutras
+),
+DadosFinais AS (
+    SELECT
+        DN.NUNOTA,
+        DN.TIPMOV,
+        DN.DTROTEIRO,
+        -- Campo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        DN.DTTRANSPORTADORA,
+        DN.NOME_PARCEIRO,
+        DN.TRANSPORTADORA,
+        DN.OBSERVACAO,
+        DN.CODVEND,
+        DN.PZO_ENTREGA_PAR,
+        DN.DT_PREVISTA_CLIENTE_CALC,
+        DN.DIAS_ATRASO, -- Valor antigo, mantenha para comparação se desejar
+        
+        DN.N_NOTA,
+        DN.DT_EMISSAO,
+        LTRIM(RTRIM(VEN.APELIDO)) + ' - ' + CONVERT(VARCHAR, VEN.CODVEND) AS REPRESENTANTE
+    FROM DetalhesNotas AS DN
+    OUTER APPLY (
+        SELECT TOP(1) V.APELIDO, V.CODVEND
+        FROM sankhya.TGFVEN AS V
+        WHERE V.CODVEND = DN.CODVEND
+    ) AS VEN
+),
+MinRoteiro AS (
+    SELECT N_NOTA, MIN(DTROTEIRO) AS DTROTEIRO_MIN
+    FROM DadosFinais
+    GROUP BY N_NOTA
+)
+SELECT
+    DF.N_NOTA AS 'N_NOTA',
+    DF.DT_EMISSAO AS 'DT_EMISSAO',
+    DF.DTROTEIRO AS 'DT_ROTEIRO',
+    -- DF.PREVENTREGA AS 'PREV_ENTREGA', -- Campo removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+    DF.DTTRANSPORTADORA AS 'DT_ENTREGA_TRANSPORTADORA',
+    DF.PZO_ENTREGA_PAR AS 'PZO_ENTREGA',
+    DF.DT_PREVISTA_CLIENTE_CALC AS 'DT_PREVISTA_CLIENTE',
+    DF.DIAS_ATRASO AS 'DIAS_ATRASO',
+    CONVERT(DATE, GETDATE()) AS 'DT_HOJE',
+    LTRIM(RTRIM(DF.NOME_PARCEIRO)) AS 'PARCEIRO',
+    DF.REPRESENTANTE AS 'REPRESENTANTE',
+    LTRIM(RTRIM(DF.TRANSPORTADORA)) AS 'TRANSPORTADORA',
+    REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(VARCHAR(MAX), DF.OBSERVACAO))), CHAR(13) + CHAR(10), ''), CHAR(10), '') AS 'OBSERVACAO'
+FROM DadosFinais AS DF
+    INNER JOIN MinRoteiro MR ON DF.N_NOTA = MR.N_NOTA AND DF.DTROTEIRO = MR.DTROTEIRO_MIN
+ORDER BY DF.DIAS_ATRASO DESC, DF.N_NOTA;

@@ -1,0 +1,73 @@
+USE SANKHYA_TESTE;
+GO
+
+;WITH Roteiro AS (                    -- 1º CTE
+    SELECT
+        R.ID,
+        R.NUNOTA AS NUNOTA_ROTEIRO,   -- renomeado aqui
+        R.TIPMOV,
+        R.DTROTEIRO,
+        R.PREVENTREGA,
+        R.DTTRANSPORTADORA,
+        R.PARCEIRO,
+        R.TRANSPORTADORA,
+        R.OBSERVACAO,
+        R.DTENTREGACLIENTE,
+        C.CODPARC,
+        C.CODVEND,
+        P.AD_PZOTRANSPORTE
+    FROM  sankhya.AD_ROTEIROENTREGA R
+    JOIN  sankhya.TGFCAB          C ON C.NUNOTA  = R.NUNOTA
+    JOIN  sankhya.TGFPAR          P ON P.CODPARC = C.CODPARC
+),
+NotaDestino AS (                      -- 2º CTE – resolve NUNOTA final
+    SELECT
+        R.*,
+        COALESCE(VR.NUNOTA, R.NUNOTA_ROTEIRO) AS NUNOTA_DET   -- FIX
+    FROM Roteiro R
+    OUTER APPLY (
+        SELECT TOP (1) V.NUNOTA
+        FROM   sankhya.TGFVAR V
+        WHERE  V.NUNOTAORIG = R.NUNOTA_ROTEIRO                -- FIX
+    ) VR
+),
+Detalhes AS (                         -- 3º CTE – agrega NUMNOTA/DTNEG
+    SELECT
+        N.*,
+        C.NUMNOTA,
+        C.DTNEG
+    FROM NotaDestino N
+    LEFT JOIN sankhya.TGFCAB C ON C.NUNOTA = N.NUNOTA_DET
+)
+SELECT
+    D.NUMNOTA AS N_NOTA,
+    D.DTNEG   AS DT_EMISSAO,
+    D.DTROTEIRO            AS DT_ROTEIRO,
+    D.PREVENTREGA          AS PREV_ENTREGA,
+    D.DTTRANSPORTADORA     AS DT_ENTREGA_TRANSPORTADORA,
+    ISNULL(D.AD_PZOTRANSPORTE,0)                         AS PZO_ENTREGA,
+    DATEADD(DAY, ISNULL(D.AD_PZOTRANSPORTE,0),
+            COALESCE(D.DTTRANSPORTADORA,D.DTROTEIRO))     AS DT_PREVISTA_CLIENTE,
+    DATEDIFF(DAY,
+             DATEADD(DAY, ISNULL(D.AD_PZOTRANSPORTE,0),
+                      COALESCE(D.DTTRANSPORTADORA,D.DTROTEIRO)),
+             CAST(GETDATE() AS DATE))                    AS DIAS_ATRASO,
+    CAST(GETDATE() AS DATE)                              AS DT_HOJE,
+    LTRIM(RTRIM(D.PARCEIRO))                             AS PARCEIRO,
+    (SELECT LTRIM(RTRIM(V.APELIDO)) + ' - ' + CONVERT(VARCHAR,V.CODVEND)
+       FROM sankhya.TGFVEN V
+      WHERE V.CODVEND = D.CODVEND)                       AS REPRESENTANTE,
+    LTRIM(RTRIM(D.TRANSPORTADORA))                       AS TRANSPORTADORA,
+    REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(VARCHAR(MAX),D.OBSERVACAO))),
+                    CHAR(13)+CHAR(10),''), CHAR(10),'')  AS OBSERVACAO
+FROM Detalhes D
+WHERE
+      D.DTENTREGACLIENTE IS NULL
+  AND CONVERT(DATE, D.DTROTEIRO) >= '2024-06-01'
+  AND CONVERT(DATE, D.DTROTEIRO) < CONVERT(DATE, GETDATE())
+  AND DATEDIFF(DAY,
+               DATEADD(DAY, ISNULL(D.AD_PZOTRANSPORTE,0),
+                        COALESCE(D.DTTRANSPORTADORA,D.DTROTEIRO)),
+               CAST(GETDATE() AS DATE)) >= 5
+ORDER BY DIAS_ATRASO DESC, N_NOTA;
+GO

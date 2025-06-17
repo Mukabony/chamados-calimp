@@ -110,7 +110,7 @@ DadosFinais AS (
         DN.NUNOTA,
         DN.TIPMOV,
         DN.DTROTEIRO,
-        -- Campo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        -- Campoo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
         DN.DTTRANSPORTADORA,
         DN.NOME_PARCEIRO,
         DN.TRANSPORTADORA,

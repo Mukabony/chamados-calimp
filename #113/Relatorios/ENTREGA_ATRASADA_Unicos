@@ -24,7 +24,7 @@ DadosBase AS (
         RE.NUNOTA,
         RE.TIPMOV,
         RE.DTROTEIRO,
-        -- Campo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        RE.PREVENTREGA,
         RE.DTTRANSPORTADORA,
         RE.DTENTREGACLIENTE,
         PAR.CODPARC AS CODPARCEIRO, -- para joins
@@ -47,7 +47,7 @@ CalculosData AS (
         DB.NUNOTA,
         DB.TIPMOV,
         DB.DTROTEIRO,
-        -- Campo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        DB.PREVENTREGA,
         DB.DTTRANSPORTADORA,
         DB.CODPARCEIRO,
         DB.NOME_PARCEIRO,
@@ -82,7 +82,7 @@ DetalhesNotas AS (
         CD.NUNOTA,
         CD.TIPMOV,
         CD.DTROTEIRO,
-        -- Campo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        CD.PREVENTREGA,
         CD.DTTRANSPORTADORA,
         CD.NOME_PARCEIRO,
         CD.TRANSPORTADORA,
@@ -110,7 +110,7 @@ DadosFinais AS (
         DN.NUNOTA,
         DN.TIPMOV,
         DN.DTROTEIRO,
-        -- Campoo PREVENTREGA removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+        DN.PREVENTREGA,
         DN.DTTRANSPORTADORA,
         DN.NOME_PARCEIRO,
         DN.TRANSPORTADORA,
@@ -159,7 +159,7 @@ SELECT
     DF.N_NOTA AS 'N_NOTA',
     DF.DT_EMISSAO AS 'DT_EMISSAO',
     DF.DTROTEIRO AS 'DT_ROTEIRO',
-    -- DF.PREVENTREGA AS 'PREV_ENTREGA', -- Campo removido conforme alinhamento em call 13/06/2025 (Samuel, Vanessa, Vivianne)
+    DF.PREVENTREGA AS 'PREV_ENTREGA',
     DF.DTTRANSPORTADORA AS 'DT_ENTREGA_TRANSPORTADORA',
     DF.PZO_ENTREGA_PAR AS 'PZO_ENTREGA',
     DF.DT_PREVISTA_CLIENTE_CALC AS 'DT_PREVISTA_CLIENTE',
@@ -173,5 +173,4 @@ SELECT
 FROM DadosFinais AS DF
     INNER JOIN MinRoteiro MR ON DF.N_NOTA = MR.N_NOTA AND DF.DTROTEIRO = MR.DTROTEIRO_MIN
     LEFT JOIN CTE_VCTO_BOLETO VBO ON VBO.NUNOTA_REF = DF.N_NOTA
-WHERE DF.N_NOTA IN (420425,421114)
 ORDER BY DF.DIAS_ATRASO DESC, DF.N_NOTA;

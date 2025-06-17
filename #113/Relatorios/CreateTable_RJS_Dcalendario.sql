@@ -1,4 +1,4 @@
--- Criação da tabela
+-- Criaï¿½ï¿½o da tabela
 
 CREATE TABLE sankhya.RJS_DCALENDARIO (
     DATA DATE PRIMARY KEY,
@@ -11,10 +11,10 @@ CREATE TABLE sankhya.RJS_DCALENDARIO (
 -- Definir domingo como primeiro dia da semana (opcional)
 SET DATEFIRST 7;
 
--- Declaração da variável de data
+-- Declaraï¿½ï¿½o da variï¿½vel de data
 DECLARE @data DATE = '20240101';
 
--- Loop de inserção
+-- Loop de inserï¿½ï¿½o
 WHILE @data <= '20301231'
 BEGIN
     INSERT INTO sankhya.RJS_DCALENDARIO (
@@ -26,18 +26,18 @@ BEGIN
     )
     VALUES (
         @data,
-        FORMAT(@data, 'dddd', 'pt-BR'),         -- Nome do dia em português
+        FORMAT(@data, 'dddd', 'pt-BR'),         -- Nome do dia em portuguï¿½s
         MONTH(@data),
         YEAR(@data),
         CASE 
-            WHEN DATEPART(WEEKDAY, @data) IN (1, 7) THEN 1  -- Domingo ou Sábado
+            WHEN DATEPART(WEEKDAY, @data) IN (1, 7) THEN 1  -- Domingo ou Sï¿½bado
             ELSE 0 
         END
     );
 
-    -- Próximo dia
+    -- Prï¿½ximo dia
     SET @data = DATEADD(DAY, 1, @data);
 END;
 
 
-select * from sankhya.RJS_DCALENDARIO
+USE SANKHYA_PRODUCAO select * from sankhya.RJS_DCALENDARIO

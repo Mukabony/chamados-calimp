@@ -1,7 +1,8 @@
-CREATE OR ALTER VIEW sankhya.VW_RJS_CALENDARIO_FERIADOS AS
+
+CREATE VIEW sankhya.VW_RJS_CALENDARIO_FERIADOS AS
 
 --************************************************************************
--- Data de criacao: 16/06/2025		Criado por: Wellington Albuquerque
+-- Data de criacao: 16/06/2025		Criado por: Samuel Antenor
 -- Observacao: View criada para ser usada nos relatorios que calculam dias uteis e atrasos desconsiderando feriados e final de semana
 --************************************************************************
 
@@ -21,4 +22,3 @@ LEFT JOIN sankhya.TSIFER F
 
 
 
-	select * from sankhya.VW_RJS_CALENDARIO_FERIADOS
